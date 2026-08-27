@@ -56,3 +56,8 @@ app:
       client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
     kakao:
       rest-api-key: ${KAKAO_REST_API_KEY:}
+  cors:
+    # Browser origins allowed to call /api/**. Comma-separated; override per environment.
+    # Dev: Expo web dev server (Metro default port 8081). Native (iOS sim / Android emulator) is
+    # not a browser and is not subject to CORS, so it needs no entry here.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8081,http://127.0.0.1:8081,https://grape.kkori.co.kr}

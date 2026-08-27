@@ -86,9 +86,16 @@ com.grape.api
 - `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` — 선택, 기본 `1h` / `30d`
 - `GOOGLE_OAUTH_CLIENT_ID` — 구글 `idToken`의 `aud` 검증용
 - `KAKAO_REST_API_KEY` — 카카오 access 토큰 검증(카카오 API 호출) 시 앱 식별용
+- `CORS_ALLOWED_ORIGINS` — 선택. `/api/**`를 호출할 수 있는 브라우저 origin, 쉼표 구분. 기본값 `http://localhost:8081,http://127.0.0.1:8081,https://grape.kkori.co.kr` (dev: Expo 웹 dev 서버 / prod: 운영 도메인). 운영에선 이 값으로 좁힐 것
 - `SERVER_PORT` — 선택, 기본 8080
 
 로컬은 `.env`(gitignore), 배포는 아래 참고.
+
+### CORS (`SecurityConfig`)
+
+- `common/config/SecurityConfig`가 `/api/**`에 대해 CORS를 켠다. Spring Security 7 방식: `CorsConfigurationSource` 빈 등록 + `http.cors(cors -> cors.configurationSource(...))`. **`Customizer.withDefaults()`는 이 조합에서 빈을 못 찾아 필터가 안 붙었다 — 반드시 `configurationSource(...)`로 명시 주입.**
+- 허용 메서드 `GET/POST/PATCH/DELETE`, 허용 헤더 `Authorization`·`Content-Type`, `allowCredentials=false` (JWT를 `Authorization` 헤더로 보내고 쿠키를 안 쓰므로 `Access-Control-Allow-Credentials` 불필요), preflight 캐시 1시간.
+- **네이티브(iOS 시뮬/Android 에뮬)는 브라우저가 아니라 CORS 대상이 아님** — origin 목록은 Expo 웹에만 관계. Expo 웹 dev 서버는 Metro 기본 포트 8081(점유 시 8082+로 증가). `localhost`/`127.0.0.1`은 별개 origin이라 둘 다 기본값에 포함. 다른 포트/LAN IP로 뜨면 `CORS_ALLOWED_ORIGINS`로 추가.
 
 ## Docker / 배포
 
