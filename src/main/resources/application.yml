@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: grape-api
+
+  autoconfigure:
+    # We authenticate via a custom JWT filter; the default in-memory user (and its logged
+    # "generated security password") is unused.
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/grape}
+    username: ${SPRING_DATASOURCE_USERNAME:grape}
+    password: ${SPRING_DATASOURCE_PASSWORD:grape}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate      # Flyway owns the schema; Hibernate only validates the mapping
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        type:
+          preferred_instant_jdbc_type: TIMESTAMP_WITH_TIMEZONE   # map Instant -> timestamptz (matches Flyway DDL)
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  web:
+    locale: en           # fixed -> Bean Validation messages render in English regardless of Accept-Language
+    locale-resolver: fixed
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# Application-specific config. Prod values come from the environment (see AGENTS.md "환경변수 / 설정").
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-insecure-secret-please-override-32bytes-min}
+    access-ttl: ${JWT_ACCESS_TTL:1h}
+    refresh-ttl: ${JWT_REFRESH_TTL:30d}
+  oauth:
+    google:
+      client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    kakao:
+      rest-api-key: ${KAKAO_REST_API_KEY:}

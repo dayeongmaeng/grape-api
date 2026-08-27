@@ -1,0 +1,12 @@
+# Keep the build context small; the build stage compiles from source.
+.git
+.gradle
+build
+*.log
+.env
+.env.*
+!.env.example
+.idea
+.vscode
+*.iml
+HELP.md
