@@ -16,7 +16,7 @@ spring:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/grape}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/grape}
     username: ${SPRING_DATASOURCE_USERNAME:grape}
     password: ${SPRING_DATASOURCE_PASSWORD:grape}
 

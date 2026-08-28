@@ -92,7 +92,7 @@ com.grape.api
 - `CORS_ALLOWED_ORIGINS` — 선택. `/api/**`를 호출할 수 있는 브라우저 origin, 쉼표 구분. 기본값 `http://localhost:8081,http://127.0.0.1:8081,https://grape.kkori.co.kr` (dev: Expo 웹 dev 서버 / prod: 운영 도메인). 운영에선 이 값으로 좁힐 것
 - `SERVER_PORT` — 선택, 기본 8080
 
-로컬은 `.env`(gitignore) — `application.yml`의 `spring.config.import: optional:file:./.env[.properties]`가 IntelliJ/`bootRun` 실행 시 자동 로드한다(`optional:`이라 `.env` 없는 Docker/운영엔 무영향, `.dockerignore`가 이미지에서 제외). DB 접속값은 `application.yml` 기본값(`localhost:5433`, `grape`/`grape`)으로 충분하므로 `.env`에서는 주석 처리 상태 — `docker run --env-file`용으로만 사용. 배포는 아래 참고.
+로컬은 `.env`(gitignore) — `application.yml`의 `spring.config.import: optional:file:./.env[.properties]`가 IntelliJ/`bootRun` 실행 시 자동 로드한다(`optional:`이라 `.env` 없는 Docker/운영엔 무영향, `.dockerignore`가 이미지에서 제외). DB 접속값은 `application.yml` 기본값(`localhost:5432`, `grape`/`grape`)으로 충분하므로 `.env`에서는 주석 처리 상태 — `docker run --env-file`용으로만 사용. 배포는 아래 참고.
 
 ### CORS (`SecurityConfig`)
 
