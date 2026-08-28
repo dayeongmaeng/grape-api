@@ -8,13 +8,18 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Verifies the ID token via Google's {@code tokeninfo} endpoint (Google checks the signature and
- * expiry server-side); we then assert {@code aud} and {@code iss}. A local JWKS verification could
- * replace this later, but the client OAuth flow is not wired yet (see server-design-draft.md §4).
+ * expiry server-side); we then assert {@code aud}, {@code iss}, and {@code email_verified}.
+ *
+ * <p>{@code aud} is matched against <em>every</em> configured client ID — the Web client (web login)
+ * and the iOS / Android native clients — because the client's native auth-code + PKCE flow mints a
+ * token whose {@code aud} is the native client, not the Web one. This mirrors kkori-api's
+ * {@code GoogleOAuthVerifier}. A local JWKS verification could replace the network call later.
  */
 @Component
 class GoogleTokeninfoVerifier implements GoogleTokenVerifier {
@@ -23,15 +28,19 @@ class GoogleTokeninfoVerifier implements GoogleTokenVerifier {
     private static final Set<String> VALID_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
 
     private final RestClient restClient;
-    private final String clientId;
+    private final List<String> allowedAudiences;
 
     GoogleTokeninfoVerifier(AppProperties props, RestClient.Builder builder) {
         this.restClient = builder.baseUrl(BASE_URL).build();
-        this.clientId = props.oauth().google().clientId();
+        this.allowedAudiences = props.oauth().google().allowedAudiences();
     }
 
     @Override
     public OAuthUserInfo verify(String idToken) {
+        if (allowedAudiences.isEmpty()) {
+            throw new ApiException(ErrorCode.INVALID_GOOGLE_TOKEN, "No Google client ID configured");
+        }
+
         Map<String, Object> body;
         try {
             body = restClient.get()
@@ -45,11 +54,15 @@ class GoogleTokeninfoVerifier implements GoogleTokenVerifier {
         if (body == null) {
             throw new ApiException(ErrorCode.INVALID_GOOGLE_TOKEN);
         }
-        if (clientId == null || clientId.isBlank() || !clientId.equals(body.get("aud"))) {
+        if (!allowedAudiences.contains(String.valueOf(body.get("aud")))) {
             throw new ApiException(ErrorCode.INVALID_GOOGLE_TOKEN, "Google token audience mismatch");
         }
         if (!VALID_ISSUERS.contains(String.valueOf(body.get("iss")))) {
             throw new ApiException(ErrorCode.INVALID_GOOGLE_TOKEN, "Google token issuer invalid");
+        }
+        // tokeninfo returns this as the string "true"/"false"; a boolean would stringify the same way.
+        if (!"true".equals(String.valueOf(body.get("email_verified")))) {
+            throw new ApiException(ErrorCode.INVALID_GOOGLE_TOKEN, "Google token email not verified");
         }
         String sub = (String) body.get("sub");
         if (sub == null || sub.isBlank()) {

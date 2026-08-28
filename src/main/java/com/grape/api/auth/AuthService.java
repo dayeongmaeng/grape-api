@@ -4,6 +4,7 @@ import com.grape.api.auth.dto.AuthUserResponse;
 import com.grape.api.auth.dto.LoginResponse;
 import com.grape.api.auth.dto.RefreshResponse;
 import com.grape.api.auth.oauth.GoogleTokenVerifier;
+import com.grape.api.auth.oauth.KakaoTokenClient;
 import com.grape.api.auth.oauth.KakaoUserClient;
 import com.grape.api.auth.oauth.OAuthUserInfo;
 import com.grape.api.bunch.BunchRepository;
@@ -38,6 +39,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final GoogleTokenVerifier googleTokenVerifier;
     private final KakaoUserClient kakaoUserClient;
+    private final KakaoTokenClient kakaoTokenClient;
     private final Clock clock;
 
     @Transactional
@@ -48,6 +50,13 @@ public class AuthService {
 
     @Transactional
     public LoginResponse loginWithKakao(String kakaoAccessToken, String authorizationHeader) {
+        OAuthUserInfo identity = kakaoUserClient.fetchUser(kakaoAccessToken);
+        return socialLogin(Provider.KAKAO, identity, authorizationHeader);
+    }
+
+    @Transactional
+    public LoginResponse loginWithKakaoCode(String code, String redirectUri, String authorizationHeader) {
+        String kakaoAccessToken = kakaoTokenClient.exchangeCode(code, redirectUri);
         OAuthUserInfo identity = kakaoUserClient.fetchUser(kakaoAccessToken);
         return socialLogin(Provider.KAKAO, identity, authorizationHeader);
     }

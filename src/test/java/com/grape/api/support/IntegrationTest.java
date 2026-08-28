@@ -2,6 +2,7 @@ package com.grape.api.support;
 
 import com.grape.api.TestcontainersConfiguration;
 import com.grape.api.auth.oauth.GoogleTokenVerifier;
+import com.grape.api.auth.oauth.KakaoTokenClient;
 import com.grape.api.auth.oauth.KakaoUserClient;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +54,9 @@ public abstract class IntegrationTest {
 
     @MockitoBean
     protected KakaoUserClient kakaoUserClient;
+
+    @MockitoBean
+    protected KakaoTokenClient kakaoTokenClient;
 
     @TestConfiguration
     static class Config {

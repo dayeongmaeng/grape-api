@@ -2,9 +2,11 @@ package com.grape.api.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
+import java.time.Duration;
 
 @Configuration
 public class AppConfig {
@@ -17,10 +19,14 @@ public class AppConfig {
 
     /**
      * Boot's {@code spring-boot-starter-webmvc} does not contribute the HTTP-client auto-config, so
-     * we expose a plain builder for the OAuth verifier clients.
+     * we expose a builder for the OAuth verifier clients. 5s connect / 5s read timeouts keep a hung
+     * Google / Kakao endpoint from pinning a request thread (same limits as kkori-api's RestClientConfig).
      */
     @Bean
     public RestClient.Builder restClientBuilder() {
-        return RestClient.builder();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(5));
+        factory.setReadTimeout(Duration.ofSeconds(5));
+        return RestClient.builder().requestFactory(factory);
     }
 }

@@ -11,6 +11,7 @@
 - 인증 정책: Access(JWT, 1h) + Refresh(opaque 랜덤, 30d, DB에 해시 저장, 매 refresh마다 로테이션) → §3-1
 - 회원탈퇴: 즉시 하드 삭제 + FK CASCADE, 소프트 삭제·유예기간 없음 → §3-2
 - 게스트 → 소셜 계정 병합 플로우 (`/auth/google`·`/auth/kakao`가 optional-auth) → §3-1
+- OAuth 토큰 검증은 kkori-api와 동일한 방식 — Google `idToken`을 `tokeninfo`로 검증하되 `aud`를 web·iOS·Android 클라이언트 ID 전부와 대조하고 `email_verified`를 확인, Kakao는 `code`→access token 교환 후 `/v2/user/me` 호출 → 아래 "OAuth 토큰 검증"
 - 응답 JSON 필드는 클라이언트 `Bunch`/`Harvest`/`NotificationSettings` 타입과 camelCase로 1:1 일치
 - 2단계 "함께 보기"/공유 기능은 이번 범위 밖
 
@@ -56,7 +57,7 @@ jjwt(`jjwt-api` + `jjwt-impl` + `jjwt-gson`)는 start.spring.io에 없으므로 
 ```
 com.grape.api
 ├─ GrapeApiApplication.java
-├─ auth       JWT 발급·검증, 구글 idToken / 카카오 accessToken 검증 클라이언트, refresh 로테이션
+├─ auth       JWT 발급·검증, OAuth 검증 클라이언트(Google tokeninfo 다중 aud / Kakao code 교환+user/me), refresh 로테이션
 ├─ user       GET/DELETE /api/users/me
 ├─ bunch      bunches + bunch_fill_events, fill/replant/archive 로직
 ├─ harvest
@@ -84,18 +85,29 @@ com.grape.api
 - `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` — DB 접속 계정
 - `JWT_SECRET` — access 토큰 HMAC 서명 키 (32바이트 이상)
 - `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` — 선택, 기본 `1h` / `30d`
-- `GOOGLE_OAUTH_CLIENT_ID` — 구글 `idToken`의 `aud` 검증용
-- `KAKAO_REST_API_KEY` — 카카오 access 토큰 검증(카카오 API 호출) 시 앱 식별용
+- `GOOGLE_OAUTH_CLIENT_ID` — 구글 `idToken`의 `aud` 검증용 "Web application" 클라이언트 ID
+- `GOOGLE_IOS_OAUTH_CLIENT_ID` / `GOOGLE_ANDROID_OAUTH_CLIENT_ID` — 선택. 네이티브 로그인은 auth-code+PKCE로 토큰을 교환해 `aud`가 네이티브 클라이언트 ID다. `GoogleTokeninfoVerifier`가 이 세 값 중 하나와 `aud`를 대조한다(kkori-api `GoogleOAuthVerifier`와 동일). 해당 플랫폼을 안 쓰면 비워 둠
+- `KAKAO_REST_API_KEY` — `POST /api/auth/kakao/web`에서 인가코드→access token 교환 시 `client_id`(`KakaoAuthApiTokenClient`). 클라이언트(grape)는 웹·네이티브 모두 이 code 경로를 쓴다. 사용자 access 토큰을 직접 받는 `POST /api/auth/kakao`(이 경우 키 불필요)도 유지되지만 현재 클라이언트는 호출하지 않는다
+- `KAKAO_CLIENT_SECRET` — 선택. 카카오 개발자 콘솔에서 "보안 > Client Secret"을 켠 경우에만, 위 토큰 교환 요청에 함께 실린다. 그 외에는 비워 둠
 - `CORS_ALLOWED_ORIGINS` — 선택. `/api/**`를 호출할 수 있는 브라우저 origin, 쉼표 구분. 기본값 `http://localhost:8081,http://127.0.0.1:8081,https://grape.kkori.co.kr` (dev: Expo 웹 dev 서버 / prod: 운영 도메인). 운영에선 이 값으로 좁힐 것
 - `SERVER_PORT` — 선택, 기본 8080
 
-로컬은 `.env`(gitignore), 배포는 아래 참고.
+로컬은 `.env`(gitignore) — `application.yml`의 `spring.config.import: optional:file:./.env[.properties]`가 IntelliJ/`bootRun` 실행 시 자동 로드한다(`optional:`이라 `.env` 없는 Docker/운영엔 무영향, `.dockerignore`가 이미지에서 제외). DB 접속값은 `application.yml` 기본값(`localhost:5433`, `grape`/`grape`)으로 충분하므로 `.env`에서는 주석 처리 상태 — `docker run --env-file`용으로만 사용. 배포는 아래 참고.
 
 ### CORS (`SecurityConfig`)
 
 - `common/config/SecurityConfig`가 `/api/**`에 대해 CORS를 켠다. Spring Security 7 방식: `CorsConfigurationSource` 빈 등록 + `http.cors(cors -> cors.configurationSource(...))`. **`Customizer.withDefaults()`는 이 조합에서 빈을 못 찾아 필터가 안 붙었다 — 반드시 `configurationSource(...)`로 명시 주입.**
 - 허용 메서드 `GET/POST/PATCH/DELETE`, 허용 헤더 `Authorization`·`Content-Type`, `allowCredentials=false` (JWT를 `Authorization` 헤더로 보내고 쿠키를 안 쓰므로 `Access-Control-Allow-Credentials` 불필요), preflight 캐시 1시간.
 - **네이티브(iOS 시뮬/Android 에뮬)는 브라우저가 아니라 CORS 대상이 아님** — origin 목록은 Expo 웹에만 관계. Expo 웹 dev 서버는 Metro 기본 포트 8081(점유 시 8082+로 증가). `localhost`/`127.0.0.1`은 별개 origin이라 둘 다 기본값에 포함. 다른 포트/LAN IP로 뜨면 `CORS_ALLOWED_ORIGINS`로 추가.
+
+### OAuth 토큰 검증 (`auth/oauth/`)
+
+kkori-api와 동일하게 동작한다. 엔드포인트 구조(`/api/auth/google`, `/api/auth/kakao`, `/api/auth/kakao/web`)는 grape 고유로 유지하되, 토큰 검증 로직만 kkori-api `GoogleOAuthVerifier` / `KakaoOAuthVerifier`에 맞췄다.
+
+- **Google** (`GoogleTokeninfoVerifier`): `https://oauth2.googleapis.com/tokeninfo?id_token=…` 호출 후 `aud` ∈ {`client-id`, `ios-client-id`, `android-client-id`}(설정된 것만), `iss` ∈ Google, `email_verified == "true"`, `sub` 존재를 검증. **`aud`를 단일 값이 아니라 목록과 대조하는 게 핵심** — 클라이언트의 네이티브 Google 로그인은 auth-code+PKCE로 토큰을 교환하므로 `aud`가 웹이 아닌 네이티브 클라이언트 ID다. 단일 `aud`만 허용하면 iOS/Android 로그인이 전부 실패한다.
+- **Kakao** (`KakaoAuthApiTokenClient` + `KakaoApiUserClient`): `code`가 오면 `https://kauth.kakao.com/oauth/token`(`grant_type=authorization_code`, `client_id`=REST API 키, `redirect_uri`, `code`, 설정 시 `client_secret`)으로 access token을 교환한 뒤 `https://kapi.kakao.com/v2/user/me`. `redirect_uri`는 authorize 요청에 쓴 값과 바이트 단위로 같아야 한다(클라이언트가 그대로 넘김).
+- OAuth용 `RestClient`는 5s connect / 5s read 타임아웃(`AppConfig.restClientBuilder`, kkori-api `RestClientConfig`와 동일). Google/Kakao가 응답하지 않을 때 요청 스레드가 묶이지 않게.
+- 검증 실패는 전부 `ApiException(INVALID_GOOGLE_TOKEN | INVALID_KAKAO_TOKEN)` → 401.
 
 ## Docker / 배포
 
@@ -123,4 +135,5 @@ com.grape.api
 - **알림 스케줄러·푸시 발송 로직을 만들지 말 것.** `reminder_time`은 자유 문자열(`LocalTime` 아님), 값만 저장.
 - **refresh 토큰을 순수 stateless JWT로 만들지 말 것.** DB에 해시 저장하고 매 `POST /api/auth/refresh`마다 기존 토큰 revoke + 새 토큰 발급(로테이션). `logout`도 전달받은 refresh 토큰을 revoke.
 - **`POST /api/auth/google`·`/kakao`는 optional-auth.** `Authorization` 헤더에 유효한 게스트 access 토큰이 실려오면 게스트 계정 병합 처리(§3-1), 없으면 일반 로그인/가입.
+- **Google `idToken`의 `aud`를 단일 클라이언트 ID와만 비교하지 말 것.** web·iOS·Android 세 클라이언트 ID 목록과 대조해야 한다(`AppProperties.Oauth.Google.allowedAudiences`). 네이티브 로그인 토큰의 `aud`는 웹 클라이언트 ID가 아니다 — 단일 비교로 되돌리면 iOS/Android Google 로그인이 깨진다.
 - **2단계 공유("함께 보기") 관련 테이블·엔티티·API를 미리 넣지 말 것.**

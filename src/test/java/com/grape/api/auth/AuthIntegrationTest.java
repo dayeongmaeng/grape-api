@@ -102,6 +102,50 @@ class AuthIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void kakaoWebLogin_exchangesCodeThenIssuesTokens() throws Exception {
+        String redirectUri = "http://localhost:8081/auth/kakao/callback";
+        given(kakaoTokenClient.exchangeCode("kauth-code", redirectUri)).willReturn("kakao-access-xyz");
+        given(kakaoUserClient.fetchUser("kakao-access-xyz"))
+                .willReturn(new OAuthUserInfo("kakao-9001", "k@example.com", "케이"));
+
+        String login = bodyOf(mockMvc.perform(post("/api/auth/kakao/web")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"code\":\"kauth-code\",\"redirectUri\":\"" + redirectUri + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.provider").value("KAKAO"))
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty()));
+
+        String id = read(login, "$.user.id");
+        assertThat(count("SELECT count(*) FROM users WHERE id = ?::uuid AND provider = 'KAKAO' "
+                + "AND provider_user_id = 'kakao-9001'", id)).isEqualTo(1);
+    }
+
+    @Test
+    void kakaoWebLogin_withGuestHeader_convertsGuestRowInPlace() throws Exception {
+        String redirectUri = "http://localhost:8081/auth/kakao/callback";
+        given(kakaoTokenClient.exchangeCode("kauth-code-g", redirectUri)).willReturn("kakao-access-g");
+        given(kakaoUserClient.fetchUser("kakao-access-g"))
+                .willReturn(new OAuthUserInfo("kakao-7002", "g@example.com", "게스트케이"));
+
+        String guest = guestToken();
+        String guestId = userId(guest);
+        String bunchId = createBunch(guest, "keepme", "", 3, 0);
+
+        String merged = bodyOf(mockMvc.perform(post("/api/auth/kakao/web")
+                        .header("Authorization", authHeader(guest))
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"code\":\"kauth-code-g\",\"redirectUri\":\"" + redirectUri + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.id").value(guestId))
+                .andExpect(jsonPath("$.user.provider").value("KAKAO")));
+
+        String newToken = read(merged, "$.accessToken");
+        mockMvc.perform(get("/api/bunches/{id}", bunchId).header("Authorization", authHeader(newToken)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void guestMerge_caseB_existingAccount_movesDataThenDeletesGuest() throws Exception {
         given(googleTokenVerifier.verify("google-token-b"))
                 .willReturn(new OAuthUserInfo("google-sub-B", "b@example.com", "Bo"));
